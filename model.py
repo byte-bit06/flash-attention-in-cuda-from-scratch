@@ -323,8 +323,39 @@ __device__ void load_tile(const float* src,
     }
 }
 
-# Step 18 - tile_scores (not yet solved)
-# TODO: implement
+# Step 18 - tile_scores
+__device__ void tile_scores(const float* q_tile, const float* k_tile, 
+                            float* s_tile, int tile_q, int tile_k, 
+                            int head_dim, float scale, 
+                            int thread_id, int num_threads) {
+    
+    // The total number of relationship scores we need to calculate for this tile
+    int total_scores = tile_q * tile_k;
+
+    // Teamwork: Threads cooperatively divide the workload
+    for (int i = thread_id; i < total_scores; i += num_threads) {
+        
+        // Find exactly which Query (row) and which Key (column) this thread is comparing
+        int q_row = i / tile_k;
+        int k_row = i % tile_k;
+
+        float dot_product = 0.0f;
+        
+        // The Inner Loop: Calculate the dot product across the head dimension
+        for (int d = 0; d < head_dim; d++) {
+            // Read from the Query tile
+            float q_val = q_tile[q_row * head_dim + d];
+            
+            // Read from the Key tile (Notice we use k_row, NOT a column index. This is the Transpose trick!)
+            float k_val = k_tile[k_row * head_dim + d];
+            
+            dot_product += q_val * k_val;
+        }
+
+        // Multiply by the temperature scale and write the final score to shared memory
+        s_tile[i] = dot_product * scale;
+    }
+}
 
 # Step 19 - tile_rowmax (not yet solved)
 # TODO: implement
