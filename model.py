@@ -144,8 +144,67 @@ __global__ void qk_scores(const float* Q, const float* K, float* scores, int seq
     }
 }
 
-# Step 10 - softmax_rows (not yet solved)
-# TODO: implement
+# Step 10 - softmax_rows
+__global__ void softmax_rows(float* matrix, int rows, int cols) {
+    // Assign one block to one specific row
+    int row = blockIdx.x;
+    int tid = threadIdx.x;
+
+    // Protect against the tail problem
+    if (row >= rows) return;
+
+    // Find the starting memory address for this specific row
+    float* row_ptr = matrix + row * cols;
+
+    __shared__ float sdata[1024];
+
+    // FIND THE MAXIMUM VALUE (row_max)
+    float local_max = -1e20f; // Start with an extremely small number
+    
+    // Each thread finds the max of its assigned columns
+    for (int i = tid; i < cols; i += blockDim.x) {
+        local_max = fmaxf(local_max, row_ptr[i]);
+    }
+    sdata[tid] = local_max;
+    __syncthreads();
+
+    // Tournament bracket fold to find the absolute maximum
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            sdata[tid] = fmaxf(sdata[tid], sdata[tid + stride]);
+        }
+        __syncthreads();
+    }
+    float row_max = sdata[0]; // Thread 0 now holds the max
+
+
+    // SUBTRACT MAX, EXPONENTIATE, & SUM
+    float local_sum = 0.0f;
+    
+    // Each thread subtracts max, applies expf(), and sums its assigned columns
+    for (int i = tid; i < cols; i += blockDim.x) {
+        float val = expf(row_ptr[i] - row_max);
+        row_ptr[i] = val; // Overwrite matrix with exp values
+        local_sum += val;
+    }
+    sdata[tid] = local_sum;
+    __syncthreads();
+
+    // Tournament bracket fold to find the total sum
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            sdata[tid] += sdata[tid + stride];
+        }
+        __syncthreads();
+    }
+    float row_sum = sdata[0]; // Thread 0 now holds the sum
+
+
+    // NORMALIZE (DIVIDE BY SUM)
+    for (int i = tid; i < cols; i += blockDim.x) {
+        row_ptr[i] /= row_sum;
+    }
+}
 
 # Step 11 - pv_matmul (not yet solved)
 # TODO: implement
