@@ -425,8 +425,38 @@ __device__ void tile_rowsum(const float* p_tile, float* row_sum_out,
     }
 }
 
-# Step 22 - accumulate_pv (not yet solved)
-# TODO: implement
+# Step 22 - accumulate_pv
+__device__ void accumulate_pv(const float* p_tile, const float* v_tile, 
+                              float* out_acc, int tile_q, int tile_k, 
+                              int head_dim, int thread_id, int num_threads) {
+    
+    // The total number of output cells we are updating
+    int total_elements = tile_q * head_dim;
+
+    // Teamwork: Threads cooperatively divide the output matrix cell by cell
+    for (int i = thread_id; i < total_elements; i += num_threads) {
+        
+        // Find exactly which Query row and which Feature column this cell represents
+        int q_row = i / head_dim;
+        int d_col = i % head_dim;
+
+        float dot_product = 0.0f;
+        
+        // The Inner Loop: Calculate the dot product between a row of P and a column of V
+        for (int k = 0; k < tile_k; k++) {
+            // Read from the probability tile (P_tile)
+            float p_val = p_tile[q_row * tile_k + k];
+            
+            // Read from the value tile (V_tile)
+            float v_val = v_tile[k * head_dim + d_col];
+            
+            dot_product += p_val * v_val;
+        }
+
+        // CRITICAL: We accumulate (+=) into the existing running output, we do NOT overwrite (=)
+        out_acc[i] += dot_product;
+    }
+}
 
 # Step 23 - flash_attention_kernel (not yet solved)
 # TODO: implement
