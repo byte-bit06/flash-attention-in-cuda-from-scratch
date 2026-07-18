@@ -36,8 +36,26 @@ __global__ void elementwise_exp(float* a, int n) {
     };
 }
 
-# Step 4 - row_max (not yet solved)
-# TODO: implement
+# Step 4 - row_max
+__global__ void row_max(const float* matrix, float* out, int R, int C) {
+    int r = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Protect against the tail problem
+    if (r < R) {        // To find a 2D coordinate (r, c) in a flat 1D array, use: (r * total_columns) + c
+        float max_val = matrix[r * C + 0];
+
+        // Loop through the rest of the columns in this specific row
+        for (int c = 1; c < C; c++) {
+            float current_val = matrix[r * C + c];
+            if (current_val > max_val) {
+                max_val = current_val;
+            }
+        }
+
+        // Write the final max value to the output array
+        out[r] = max_val;
+    }
+}
 
 # Step 5 - row_sum (not yet solved)
 # TODO: implement
