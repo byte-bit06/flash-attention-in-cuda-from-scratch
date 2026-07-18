@@ -262,8 +262,11 @@ void naive_attention(const float* Q, const float* K, const float* V, float* d_ou
     cudaFree(d_scores);
 }
 
-# Step 13 - online_max (not yet solved)
-# TODO: implement
+# Step 13 - online_max
+__device__ float online_max(float old_max, float new_val) {
+    // TODO: return the running max of old_max and new_val
+    return fmaxf(old_max, new_val);
+}
 
 # Step 14 - correction_factor (not yet solved)
 # TODO: implement
