@@ -285,8 +285,43 @@ __device__ void rescale_output(float* out_row, int head_dim, float correction) {
         }
 }
 
-# Step 17 - load_tile (not yet solved)
-# TODO: implement
+# Step 17 - load_tile
+__device__ void load_tile(const float* src, 
+                          float* shared_dst, 
+                          int src_row_start, 
+                          int src_col_start, 
+                          int src_rows, 
+                          int src_cols, 
+                          int tile_rows, 
+                          int tile_cols, 
+                          int thread_id, 
+                          int num_threads) {
+    
+    // Calculate the exact size of the small tile we are moving to fast memory
+    int total_elements = tile_rows * tile_cols;
+
+    // Teamwork: Threads stride across the tile to load it cooperatively
+    for (int i = thread_id; i < total_elements; i += num_threads) {
+        
+        // Find exactly where this element belongs in the small tile
+        int local_row = i / tile_cols;
+        int local_col = i % tile_cols;
+
+        // Map that coordinate to the giant global matrix
+        int global_row = src_row_start + local_row;
+        int global_col = src_col_start + local_col;
+
+        // Safety check: Does this coordinate actually exist in the big matrix?
+        if (global_row >= 0 && global_row < src_rows && 
+            global_col >= 0 && global_col < src_cols) {
+            // It exists! Copy the real data.
+            shared_dst[i] = src[global_row * src_cols + global_col];
+        } else {
+            // It hangs off the edge. Pad it with harmless zeroes.
+            shared_dst[i] = 0.0f;
+        }
+    }
+}
 
 # Step 18 - tile_scores (not yet solved)
 # TODO: implement
