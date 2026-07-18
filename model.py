@@ -381,8 +381,29 @@ __device__ void tile_rowmax(const float* s_tile, float* row_max_out,
     }
 }
 
-# Step 20 - tile_exp (not yet solved)
-# TODO: implement
+# Step 20 - tile_exp
+__device__ void tile_exp(float* s_tile, const float* row_max, 
+                         int tile_q, int tile_k, 
+                         int thread_id, int num_threads) {
+    
+    // The total number of cells in the score tile
+    int total_elements = tile_q * tile_k;
+
+    // Teamwork: Threads cooperatively divide the workload cell by cell
+    for (int i = thread_id; i < total_elements; i += num_threads) {
+        
+        // Find exactly which row this specific cell belongs to
+        int r = i / tile_k;
+        
+        // Read the maximum value that we previously calculated for this specific row
+        float current_row_max = row_max[r];
+        
+        // Fetch the raw score, subtract the row's maximum, and exponentiate it in place
+        // We use expf() which is the optimized CUDA math function for standard floats
+        float raw_score = s_tile[i];
+        s_tile[i] = expf(raw_score - current_row_max);
+    }
+}
 
 # Step 21 - tile_rowsum (not yet solved)
 # TODO: implement
