@@ -225,8 +225,42 @@ __global__ void pv_matmul(const float* P, const float* V, float* out, int seq_le
     }
 }
 
-# Step 12 - naive_attention (not yet solved)
-# TODO: implement
+# Step 12 - naive_attention
+void naive_attention(const float* Q, const float* K, const float* V, float* d_out, int seq_len, int head_dim) {
+    // Allocate intermediate scratch memory for the P matrix (seq_len x seq_len)
+    float* d_scores;
+    size_t scores_size = seq_len * seq_len * sizeof(float);
+    cudaMalloc((void**)&d_scores, scores_size);
+
+    // qk_scores (Q * K^T)
+    // 2D grid covering every (row, col) pair in the (seq_len, seq_len) score matrix
+    dim3 block_qk(16, 16);
+    dim3 grid_qk((seq_len + block_qk.x - 1) / block_qk.x, 
+                 (seq_len + block_qk.y - 1) / block_qk.y);
+    
+    qk_scores<<<grid_qk, block_qk>>>(Q, K, d_scores, seq_len, head_dim);
+
+    // softmax_rows (Probabilities)
+    // 1D grid with 1 block per row. 
+    // The block size MUST be a power of 2 for the tree reduction to work safely.
+    int threads_softmax = 256; 
+    
+    // The instructions warn about dynamic shared memory. We pass it as the 3rd launch parameter.
+    size_t shared_mem_bytes = seq_len * sizeof(float); 
+    
+    softmax_rows<<<seq_len, threads_softmax, shared_mem_bytes>>>(d_scores, seq_len, seq_len);
+
+    // pv_matmul (P * V)
+    // 2D grid covering every (row, col) pair in the output matrix (seq_len, head_dim)
+    dim3 block_pv(16, 16);
+    dim3 grid_pv((head_dim + block_pv.x - 1) / block_pv.x, 
+                 (seq_len + block_pv.y - 1) / block_pv.y);
+    
+    pv_matmul<<<grid_pv, block_pv>>>(d_scores, V, d_out, seq_len, head_dim);
+
+    // Free the scratch memory to prevent memory leaks
+    cudaFree(d_scores);
+}
 
 # Step 13 - online_max (not yet solved)
 # TODO: implement
