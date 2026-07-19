@@ -578,11 +578,64 @@ __global__ void flash_attention_kernel(const float* q, const float* k, const flo
     }
 }
 
-# Step 24 - flash_attention_launcher (not yet solved)
-# TODO: implement
+# Step 24 - flash_attention_launcher
+#include <cmath>
 
-# Step 25 - causal_mask (not yet solved)
-# TODO: implement
+void flash_attention_launcher(const float* d_q, const float* d_k, const float* d_v,
+                              float* d_out, int seq_len, int head_dim,
+                              int tile_q, int tile_k) {
+    
+    // Compute the scaling factor: 1 / sqrt(head_dim)
+    float scale = 1.0f / sqrtf((float)head_dim);
+
+    // Configure Grid and Block dimensions
+    // Grid: One block per query tile (ceiling division to handle ragged sequences)
+    int grid_size = (seq_len + tile_q - 1) / tile_q;
+    
+    // Block: 128 threads is the standard workforce we saw in the test logs
+    int block_size = 128;
+    
+    // Calculate dynamic shared memory size in bytes
+    // Total Floats = q_tile + k_tile + v_tile + s_tile + out_acc + 4 trackers
+    //              = (tq*d) + (tk*d) + (tk*d) + (tq*tk) + (tq*d) + (4*tq)
+    //              = 2*(tq*d) + 2*(tk*d) + (tq*tk) + 4*tq
+    int num_floats = (2 * tile_q * head_dim) + 
+                     (2 * tile_k * head_dim) + 
+                     (tile_q * tile_k) + 
+                     (4 * tile_q);
+                     
+    int smem_bytes = num_floats * sizeof(float);
+    
+    // Launch the kernel
+    flash_attention_kernel<<<grid_size, block_size, smem_bytes>>>(
+        d_q, d_k, d_v, d_out, 
+        seq_len, head_dim, 
+        tile_q, tile_k, scale
+    );
+}
+
+# Step 25 - causal_mask
+__device__ void causal_mask(float* s_tile, int q_row_start, int k_col_start,
+                            int tile_q, int tile_k, int thread_id, int num_threads) {
+    
+    int total_elements = tile_q * tile_k;
+    
+    // Cooperative grid-stride loop
+    for (int i = thread_id; i < total_elements; i += num_threads) {
+        // Decode linear index into local 2D tile coordinates
+        int local_r = i / tile_k;
+        int local_c = i % tile_k;
+        
+        // Translate local coordinates to absolute global sequence indices
+        int global_q = q_row_start + local_r;
+        int global_k = k_col_start + local_c;
+        
+        // If the key is in the "future" relative to the query, blind it
+        if (global_k > global_q) {
+            s_tile[i] = -INFINITY;
+        }
+    }
+}
 
 # Step 26 - flash_attention_causal_kernel (not yet solved)
 # TODO: implement
