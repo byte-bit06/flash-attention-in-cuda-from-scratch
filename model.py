@@ -463,7 +463,7 @@ __global__ void flash_attention_kernel(const float* q, const float* k, const flo
                                        float* out, int seq_len, int head_dim,
                                        int tile_q, int tile_k, float scale) {
     
-    // 1. Dynamic Shared Memory (SRAM) Allocation
+    // Dynamic Shared Memory (SRAM) Allocation
     extern __shared__ float smem[];
     float* q_tile = smem;
     float* k_tile = q_tile + (tile_q * head_dim);
@@ -485,7 +485,7 @@ __global__ void flash_attention_kernel(const float* q, const float* k, const flo
     // Global row offset for this specific thread block's Query tile
     int q_row_start = blockIdx.x * tile_q;
     
-    // 2. State Initialization
+    // State Initialization
     for (int i = tid; i < tile_q * head_dim; i += num_threads) {
         out_acc[i] = 0.0f;
     }
@@ -495,13 +495,13 @@ __global__ void flash_attention_kernel(const float* q, const float* k, const flo
     }
     __syncthreads(); 
     
-    // 3. Anchor the Query Tile
+    // Anchor the Query Tile
     load_tile(q, q_tile, q_row_start, 0, seq_len, head_dim, tile_q, head_dim, tid, num_threads);
     __syncthreads();
     
     int num_k_tiles = (seq_len + tile_k - 1) / tile_k;
     
-    // 4. K/V Streaming Loop 
+    // K/V Streaming Loop 
     for (int t = 0; t < num_k_tiles; t++) {
         int k_row_start = t * tile_k;
         
@@ -566,7 +566,7 @@ __global__ void flash_attention_kernel(const float* q, const float* k, const flo
         __syncthreads();
     }
     
-    // 5. Epilogue: Final Normalization and Global Memory Write
+    // Epilogue: Final Normalization and Global Memory Write
     for (int i = tid; i < tile_q * head_dim; i += num_threads) {
         int r = i / head_dim;
         int d = i % head_dim;
